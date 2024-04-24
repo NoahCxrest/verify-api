@@ -15,9 +15,10 @@ app = Flask(__name__)
 def auth():
     code = request.args.get('code')
     discord_id = request.args.get('state')
+    print(f'[VERIFICATION] {discord_id} attempted to verify with {code}')
     if pending_coll.find_one({'discord_id': discord_id}) is None:
         return 'You have not started a OAuth2 session. If this is invalid, please contact ERM Support.'
-    
+    print(f'[VERIFICATION] {discord_id} passed initial check.')
     req = requests.post("https://apis.roblox.com/oauth/v1/token", data={
         "client_id": int(config('CLIENT_ID')),
         "client_secret": config("CLIENT_SECRET"),
@@ -40,6 +41,7 @@ def auth():
             "discord_id": discord_id,
             "roblox_id": new_req.json()["sub"]
         })
+    print(f'[VERIFICATION] {discord_id} verified as {new_req.json(["preferred_username"])}.')
     return redirect(url_for('finished', username=new_req.json()['preferred_username']))
 
 @app.route('/finished')
