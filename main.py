@@ -49,6 +49,6 @@ def finished():
     username = request.args.get('username')
     return render_template('finished.html', username=username)
 
-app.run(port=80, debug=False)
+app.run(host="0.0.0.0", port=80, debug=False)
 
 
