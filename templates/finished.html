@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Authorized with ERM</title>
+    <link rel="stylesheet" href="{{ url_for('static',filename='style.css') }}">
+
+</head>
+<body>
+<!-- partial:index.partial.html -->
+<div class="modal">
+    <div class="close-modal">
+    </div>
+    <div class="hand-area">
+        <div class="hand"></div>
+    </div>
+    <div class="content">
+        <div>
+            <h2>Authorized</h2>
+            <p class="success label">You've Authorized with ERM</p>
+            <p class="sub">You can now safely close this tab/window. You are now verified as <strong>{{ username }}</strong>.
+                <br>
+                <br>
+                <a class="button main"
+                   href="https://discord.com/oauth2/authorize?client_id=978662093408591912&scope=bot%20applications.commands&permissions=8"
+                   target="_blank">Invite ERM
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+                        <path d="M400 320H368C359 320 352 327 352 336V448H64V160H176C185 160 192 153 192 144V112C192 103 185 96 176 96H48C22 96 0 118 0 144V464C0 490 22 512 48 512H368C394 512 416 490 416 464V336C416 327 409 320 400 320ZM503 9C497 4 489 0 480 0H352C334 0 320 14 320 32V32C320 50 334 64 352 64H403L176 291C164 303 164 323 176 336L176 336C189 349 209 349 221 336L448 109V160C448 178 462 192 480 192H480C498 192 512 178 512 160V32C512 23 508 15 503 9Z"/>
+                    </svg>
+                </a>
+        </div>
+    </div>
+</div>
+<!-- partial -->
+<script type="module" src="{{ url_for('static',filename='script.js') }}"></script>
+
+</body>
+</html>

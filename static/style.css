@@ -1,0 +1,172 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito+Sans&family=Poppins:wght@500&display=swap');
+
+body {
+    height: 100vh;
+    margin: 0;
+    display: grid;
+    font-size: 16px;
+    place-items: center;
+    font-family: 'Nunito Sans', sans-serif;
+    background: rgb(94, 67, 255);
+    color: #fff;
+    background: #171717
+}
+
+p {
+    font-weight: 100;
+    line-height: 1.5;
+}
+
+p.success {
+    color: #4BFFB2;
+}
+
+svg {
+    width: 14px;
+    height: 14px;
+    fill: #fff;
+    margin-left: 3px;
+}
+
+.close-modal svg {
+    width: 32px;
+    height: 32px;
+    position: absolute;
+    left: 0;
+    top: 0;
+    margin-top: 8px;
+    margin-left: 8px;
+    z-index: 9999;
+    opacity: .5;
+    transform: rotate(0deg);
+    transition: all .1s;
+}
+
+.close-modal {
+    position: -webkit-sticky; /* Safari */
+    position: sticky;
+    top: 0;
+    z-index: 9999;
+}
+
+.close-modal svg:hover {
+    opacity: 1;
+    transform: rotate(90deg);
+}
+
+p.sub {
+    color: rgba(255, 255, 255, .8);
+    padding: 20px 0;
+}
+
+.label {
+    background: rgb(75 255 178 / 10%);
+    display: inline-block;
+    padding: 0 5px;
+    border-radius: 4px;
+}
+
+h2 {
+    font-size: 4em;
+    line-height: 1.5;
+    font-family: 'Poppins', sans-serif;
+    letter-spacing: -.01em;
+    margin: 0;
+}
+
+.hand-area {
+    background: linear-gradient(140deg, rgba(75, 255, 177, 1) 0%, rgba(58, 161, 68, 1) 100%);
+    position: relative;
+    flex: 100%;
+    overflow: hidden;
+    border-radius: 20px 0 0 20px;
+    height: 500px;
+}
+
+.hand {
+    width: 416px;
+    height: 493px;
+    bottom: -40px;
+    position: absolute;
+    margin: 0 auto;
+    left: 50%;
+    margin-left: -208px;
+    background: url("https://drive.google.com/uc?export=view&id=1RleXpJiYfaGzxeSEEQC9LEU3bBGVYbpZ");
+    animation: 1.5s cubic-bezier(0.65, 0, 0.5, 1) .5s hand;
+    animation-fill-mode: both;
+    transform-origin: bottom left;
+}
+
+@keyframes hand {
+    0% {
+        opacity: 0;
+        transform: rotate(90deg);
+    }
+    75% {
+        opacity: 1;
+        transform: rotate(-10deg);
+    }
+    100% {
+        transform: rotate(0deg);
+    }
+}
+
+.modal {
+    max-width: 1200px;
+    display: flex;
+    flex-direction: row;
+    background-color: #202020;
+    border: 2px solid #333333;
+    margin: 5px;
+    border-radius: 20px;
+    margin: 20px;
+    position: relative;
+}
+
+.content {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 60px;
+    animation: 1s ease-in 1.5s fadein;
+    animation-fill-mode: both;
+}
+
+@keyframes fadein {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+.button {
+    background: #3DB157;
+    padding: 10px 20px;
+    border-radius: 100px;
+    color: #fff;
+    text-decoration: none;
+    display: inline-block;
+    transition: background .2s;
+}
+
+.button:hover {
+    background: #3CA84D;
+}
+
+@media (max-width: 1120px) {
+    .modal {
+        flex-direction: column;
+        flex-flow: wrap;
+    }
+
+    .hand-area {
+        border-radius: 20px 20px 0 0;
+        height: 420px;
+    }
+
+    .hand {
+        margin-bottom: -80px;
+    }
+}
