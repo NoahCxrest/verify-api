@@ -7,7 +7,7 @@ import time
 
 
 client = pymongo.MongoClient(config('MONGO_URL'))
-db = client['erm']
+db = client[config('DATABASE')]
 coll = db['oauth2']
 pending_coll = db['pending_oauth2']
 app = Flask(__name__)
