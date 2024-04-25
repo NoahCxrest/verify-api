@@ -42,7 +42,7 @@ def auth():
             "discord_id": int(discord_id),
             "roblox_id": int(new_req.json()["sub"])
         })
-    print(f'[VERIFICATION] {discord_id} verified as {new_req.json(["preferred_username"])}.')
+    print(f'[VERIFICATION] {discord_id} verified as {new_req.json()["preferred_username"]}.')
     return redirect(url_for('finished', username=new_req.json()['preferred_username']))
 
 @app.route('/finished')
