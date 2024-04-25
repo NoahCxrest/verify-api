@@ -3,6 +3,7 @@ from flask import Flask, request, redirect, url_for, render_template
 import requests
 import pymongo
 from decouple import config
+import time
 
 
 client = pymongo.MongoClient(config('MONGO_URL'))
@@ -16,7 +17,7 @@ def auth():
     code = request.args.get('code')
     discord_id = request.args.get('state')
     print(f'[VERIFICATION] {discord_id} attempted to verify with {code}')
-    if pending_coll.find_one({'discord_id': discord_id}) is None:
+    if pending_coll.find_one({'discord_id': int(discord_id)}) is None:
         return 'You have not started a OAuth2 session. If this is invalid, please contact ERM Support.'
     print(f'[VERIFICATION] {discord_id} passed initial check.')
     req = requests.post("https://apis.roblox.com/oauth/v1/token", data={
@@ -33,13 +34,13 @@ def auth():
     })
     if coll.find_one({ "discord_id": discord_id }):
         coll.update_one(
-            { 'discord_id': discord_id },
-            {"$set": { "roblox_id": new_req.json()["sub"]}}
+            { 'discord_id': int(discord_id) },
+            {"$set": { "roblox_id": int(new_req.json()["sub"]), "last_updated": int(time.time())}}
         )
     else:
         coll.insert_one({
-            "discord_id": discord_id,
-            "roblox_id": new_req.json()["sub"]
+            "discord_id": int(discord_id),
+            "roblox_id": int(new_req.json()["sub"])
         })
     print(f'[VERIFICATION] {discord_id} verified as {new_req.json(["preferred_username"])}.')
     return redirect(url_for('finished', username=new_req.json()['preferred_username']))
