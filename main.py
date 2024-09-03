@@ -15,6 +15,7 @@ app = Flask(__name__)
 @app.route('/auth')
 def auth():
     code = request.args.get('code')
+    panel = request.args.get("panel")
     discord_id = request.args.get('state')
     print(f'[VERIFICATION] {discord_id} attempted to verify with {code}')
     if pending_coll.find_one({'discord_id': int(discord_id)}) is None:
@@ -43,7 +44,7 @@ def auth():
             "roblox_id": int(new_req.json()["sub"])
         })
     print(f'[VERIFICATION] {discord_id} verified as {new_req.json()["preferred_username"]}.')
-    return redirect(url_for('finished', username=new_req.json()['preferred_username']))
+    return redirect(url_for('finished', username=new_req.json()['preferred_username'])) if panel in [None, "", False, "false"] else redirect("http://localhost:5173/settings")
 
 @app.route('/finished')
 def finished():
