@@ -32,7 +32,7 @@ def auth():
     new_req = requests.get("https://apis.roblox.com/oauth/v1/userinfo", headers={
         "Authorization": f"Bearer {access_token}"
     })
-    if coll.find_one({ "discord_id": discord_id }):
+    if coll.find_one({ "discord_id": int(discord_id) }):
         coll.update_one(
             { 'discord_id': int(discord_id) },
             {"$set": { "roblox_id": int(new_req.json()["sub"]), "last_updated": int(time.time())}}
