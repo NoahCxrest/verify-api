@@ -1,160 +1,148 @@
-from flask import Flask, request, redirect, url_for, render_template, jsonify
-from functools import wraps
+from flask import Flask, request, redirect, url_for, render_template
 import requests
 import pymongo
 from decouple import config
 import time
-from typing import Optional, Dict, Any
 import logging
 from dataclasses import dataclass
-from http import HTTPStatus
+from typing import Optional, Tuple
+from functools import wraps
 
 @dataclass
-class AppConfig:
-    MONGO_URL: str
-    DATABASE: str
-    CLIENT_ID: int
-    CLIENT_SECRET: str
-    ROBLOX_OAUTH_TOKEN_URL: str = "https://apis.roblox.com/oauth/v1/token"
+class Settings:
+    MONGO_URL: str = config('MONGO_URL')
+    DATABASE: str = config('DATABASE')
+    CLIENT_ID: int = config('CLIENT_ID')
+    CLIENT_SECRET: str = config('CLIENT_SECRET')
+    ROBLOX_TOKEN_URL: str = "https://apis.roblox.com/oauth/v1/token"
     ROBLOX_USERINFO_URL: str = "https://apis.roblox.com/oauth/v1/userinfo"
     PANEL_REDIRECT_URL: str = "http://localhost:5173/settings"
-    HOST: str = "0.0.0.0"
-    PORT: int = 80
-    DEBUG: bool = False
 
-class DatabaseClient:
-    def __init__(self, config: AppConfig):
-        self.client = pymongo.MongoClient(config.MONGO_URL)
-        self.db = self.client[config.DATABASE]
-        self.oauth_collection = self.db['oauth2']
-        self.pending_collection = self.db['pending_oauth2']
+app = Flask(__name__)
+settings = Settings()
 
-    def get_pending_verification(self, discord_id: int) -> Optional[Dict]:
-        return self.pending_collection.find_one({'discord_id': discord_id})
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
-    def update_or_create_verification(self, discord_id: int, roblox_id: int) -> None:
-        update_data = {
-            "roblox_id": roblox_id,
-            "last_updated": int(time.time())
-        }
+client = pymongo.MongoClient(
+    settings.MONGO_URL,
+    maxPoolSize=50,
+    connectTimeoutMS=5000,
+    serverSelectionTimeoutMS=5000
+)
+db = client[settings.DATABASE]
+oauth_collection = db['oauth2']
+pending_collection = db['pending_oauth2']
 
-        if self.oauth_collection.find_one({"discord_id": discord_id}):
-            self.oauth_collection.update_one(
-                {'discord_id': discord_id},
-                {"$set": update_data}
-            )
-        else:
-            self.oauth_collection.insert_one({
-                "discord_id": discord_id,
-                **update_data
-            })
+def handle_errors(f):
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        try:
+            return f(*args, **kwargs)
+        except Exception as e:
+            logger.error(f"Error in {f.__name__}: {str(e)}")
+            return render_template('error.html', message="An error occurred. Please try again later."), 500
+    return wrapper
 
-class RobloxOAuth:
-    def __init__(self, config: AppConfig):
-        self.config = config
-
-    def get_access_token(self, code: str) -> str:
+def get_roblox_access_token(code: str) -> Optional[str]:
+    """Get Roblox access token using authorization code."""
+    try:
         response = requests.post(
-            self.config.ROBLOX_OAUTH_TOKEN_URL,
+            settings.ROBLOX_TOKEN_URL,
             data={
-                "client_id": self.config.CLIENT_ID,
-                "client_secret": self.config.CLIENT_SECRET,
+                "client_id": settings.CLIENT_ID,
+                "client_secret": settings.CLIENT_SECRET,
                 "grant_type": "authorization_code",
                 "code": code
             },
-            headers={"Content-Type": "application/x-www-form-urlencoded"}
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10
         )
         response.raise_for_status()
-        return response.json()['access_token']
+        return response.json().get('access_token')
+    except (requests.RequestException, KeyError) as e:
+        logger.error(f"Failed to get access token: {str(e)}")
+        return None
 
-    def get_user_info(self, access_token: str) -> Dict[str, Any]:
+def get_roblox_user_info(access_token: str) -> Optional[Tuple[int, str]]:
+    """Get Roblox user info using access token."""
+    try:
         response = requests.get(
-            self.config.ROBLOX_USERINFO_URL,
-            headers={"Authorization": f"Bearer {access_token}"}
+            settings.ROBLOX_USERINFO_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10
         )
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        return int(data["sub"]), data["preferred_username"]
+    except (requests.RequestException, KeyError) as e:
+        logger.error(f"Failed to get user info: {str(e)}")
+        return None
 
-def create_app(config: AppConfig) -> Flask:
-    app = Flask(__name__)
-    app.config.from_object(config)
-
-    db_client = DatabaseClient(config)
-    roblox_oauth = RobloxOAuth(config)
-
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
-
-    def handle_errors(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            try:
-                return f(*args, **kwargs)
-            except requests.exceptions.RequestException as e:
-                logger.error(f"OAuth request failed: {str(e)}")
-                return jsonify({"error": "Failed to communicate with Roblox API"}), HTTPStatus.BAD_GATEWAY
-            except Exception as e:
-                logger.error(f"Unexpected error: {str(e)}")
-                return jsonify({"error": "Internal server error"}), HTTPStatus.INTERNAL_SERVER_ERROR
-        return decorated_function
-
-    @app.route('/auth')
-    @handle_errors
-    def auth():
-        code = request.args.get('code')
-        panel = request.args.get("panel")
-        discord_id = request.args.get('state')
-
-        if not all([code, discord_id]):
-            return jsonify({"error": "Missing required parameters"}), HTTPStatus.BAD_REQUEST
-
-        try:
-            discord_id = int(discord_id)
-        except ValueError:
-            return jsonify({"error": "Invalid discord_id format"}), HTTPStatus.BAD_REQUEST
-
-        logger.info(f'Verification attempt from Discord ID: {discord_id}')
-
-        if not db_client.get_pending_verification(discord_id):
-            return jsonify({
-                "error": "No active OAuth2 session found. Please contact ERM Support if this is incorrect."
-            }), HTTPStatus.NOT_FOUND
-
-        access_token = roblox_oauth.get_access_token(code)
-        user_info = roblox_oauth.get_user_info(access_token)
-        
-        db_client.update_or_create_verification(discord_id, int(user_info["sub"]))
-        
-        logger.info(f'Successfully verified Discord ID {discord_id} as {user_info["preferred_username"]}')
-
-        if panel and panel.lower() not in ['none', '', 'false']:
-            return redirect(config.PANEL_REDIRECT_URL)
-        return redirect(url_for('finished', username=user_info['preferred_username']))
-
-    @app.route('/finished')
-    @handle_errors
-    def finished():
-        username = request.args.get('username')
-        if not username:
-            return jsonify({"error": "Missing username parameter"}), HTTPStatus.BAD_REQUEST
-        return render_template('finished.html', username=username)
-
-    return app
-
-def main():
-    config = AppConfig(
-        MONGO_URL=config('MONGO_URL'),
-        DATABASE=config('DATABASE'),
-        CLIENT_ID=int(config('CLIENT_ID')),
-        CLIENT_SECRET=config('CLIENT_SECRET')
-    )
+def update_user_verification(discord_id: int, roblox_id: int) -> None:
+    """Update or insert user verification data."""
+    update_data = {
+        "roblox_id": roblox_id,
+        "last_updated": int(time.time())
+    }
     
-    app = create_app(config)
-    app.run(
-        host=config.HOST,
-        port=config.PORT,
-        debug=config.DEBUG
+    oauth_collection.update_one(
+        {'discord_id': discord_id},
+        {"$set": update_data},
+        upsert=True
     )
+
+@app.route('/auth')
+@handle_errors
+def auth():
+    """Handle OAuth2 authorization callback."""
+    code = request.args.get('code')
+    panel = request.args.get("panel")
+    discord_id = request.args.get('state')
+
+    if not all([code, discord_id]):
+        return 'Missing required parameters', 400
+
+    try:
+        discord_id = int(discord_id)
+    except ValueError:
+        return 'Invalid discord ID', 400
+
+    logger.info(f'[VERIFICATION] {discord_id} attempting verification')
+
+    if not pending_collection.find_one({'discord_id': discord_id}):
+        return 'No active OAuth2 session found. Please contact ERM Support if this is incorrect.'
+
+    access_token = get_roblox_access_token(code)
+    if not access_token:
+        return 'Failed to get access token', 500
+
+    user_info = get_roblox_user_info(access_token)
+    if not user_info:
+        return 'Failed to get user info', 500
+
+    roblox_id, username = user_info
+    
+    update_user_verification(discord_id, roblox_id)
+    
+    logger.info(f'[VERIFICATION] {discord_id} verified as {username}')
+
+    if panel in [None, "", False, "false"]:
+        return redirect(url_for('finished', username=username))
+    return redirect(settings.PANEL_REDIRECT_URL)
+
+@app.route('/finished')
+@handle_errors
+def finished():
+    """Display verification completion page."""
+    username = request.args.get('username')
+    if not username:
+        return redirect(url_for('auth'))
+    return render_template('finished.html', username=username)
 
 if __name__ == '__main__':
-    main()
+    app.run(host="0.0.0.0", port=80, debug=False)
