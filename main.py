@@ -7,7 +7,6 @@ import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple
 from pymongo.errors import DuplicateKeyError, OperationFailure
-from functools import wraps
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.retry import Retry
 
@@ -39,25 +38,6 @@ class Database:
         self.db = self.client[settings.DATABASE]
         self.oauth_collection = self.db['oauth2']
         self.pending_collection = self.db['pending_oauth2']
-        self._ensure_indexes()
-
-    def _ensure_indexes(self) -> None:
-        """Ensure indexes exist, handling existing indexes gracefully"""
-        index_fields = [
-            ('oauth_collection', 'discord_id'),
-            ('pending_collection', 'discord_id')
-        ]
-        for collection_name, field in index_fields:
-            self._create_index_if_not_exists(collection_name, field)
-
-    def _create_index_if_not_exists(self, collection_name: str, field: str) -> None:
-        """Create unique index if it doesn't exist"""
-        collection = getattr(self, collection_name)
-        try:
-            if field not in {index['name'] for index in collection.list_indexes()}:
-                collection.create_index([(field, pymongo.ASCENDING)], unique=True, background=True)
-        except OperationFailure as e:
-            self.logger.warning(f"Index creation warning for {collection_name}: {e}")
 
     def check_pending_verification(self, discord_id: int) -> bool:
         """Check if a discord ID has a pending verification"""
