@@ -7,7 +7,7 @@ import logging
 from dataclasses import dataclass
 from typing import Optional, Tuple
 from functools import wraps
-import traceback
+from pymongo.errors import DuplicateKeyError, OperationFailure
 
 # region Configuration
 @dataclass(frozen=True)
@@ -29,7 +29,7 @@ class Database:
     def __init__(self, settings: Settings, logger: logging.Logger):
         self.logger = logger
         self._init_connection(settings)
-        self._create_indexes()
+        self._ensure_indexes()
     
     def _init_connection(self, settings: Settings) -> None:
         """Initialize MongoDB connection"""
@@ -43,34 +43,67 @@ class Database:
         self.oauth_collection = self.db['oauth2']
         self.pending_collection = self.db['pending_oauth2']
     
-    def _create_indexes(self) -> None:
-        """Create necessary database indexes"""
-        self.oauth_collection.create_index('discord_id', unique=True)
-        self.pending_collection.create_index('discord_id', unique=True)
+    def _ensure_indexes(self) -> None:
+        """Ensure indexes exist, handling existing indexes gracefully"""
+        try:
+            existing_indexes = set(index['name'] for index in self.oauth_collection.list_indexes())
+            
+            if 'discord_id_1' not in existing_indexes:
+                self.oauth_collection.create_index('discord_id', unique=True, background=True)
+            if 'discord_id_1' not in set(index['name'] for index in self.pending_collection.list_indexes()):
+                self.pending_collection.create_index('discord_id', unique=True, background=True)
+                
+        except OperationFailure as e:
+            self.logger.warning(f"Index creation warning: {str(e)}")
+            pass
+        except Exception as e:
+            self.logger.error(f"Failed to ensure indexes: {str(e)}")
+            raise
     
     def check_pending_verification(self, discord_id: int) -> bool:
         """Check if a discord ID has a pending verification"""
-        return bool(self.pending_collection.find_one(
-            {'discord_id': discord_id},
-            projection={'_id': 1}
-        ))
+        try:
+            return bool(self.pending_collection.find_one(
+                {'discord_id': discord_id},
+                projection={'_id': 1}
+            ))
+        except Exception as e:
+            self.logger.error(f"Error checking pending verification: {str(e)}")
+            return False
     
-    def update_verification(self, discord_id: int, roblox_id: int) -> None:
+    def update_verification(self, discord_id: int, roblox_id: int) -> bool:
         """Update or create user verification record"""
         try:
-            self.oauth_collection.update_one(
+            update_data = {
+                'roblox_id': roblox_id,
+                'last_updated': int(time.time())
+            }
+            
+            # Try to update existing record first
+            result = self.oauth_collection.update_one(
                 {'discord_id': discord_id},
-                {
-                    '$set': {
-                        'roblox_id': roblox_id,
-                        'last_updated': int(time.time())
-                    }
-                },
-                upsert=True
+                {'$set': update_data}
             )
+            
+            # If no existing record was found, insert new one
+            if result.matched_count == 0:
+                try:
+                    self.oauth_collection.insert_one({
+                        'discord_id': discord_id,
+                        **update_data
+                    })
+                except DuplicateKeyError:
+                    # If insert fails due to race condition, try update again
+                    self.oauth_collection.update_one(
+                        {'discord_id': discord_id},
+                        {'$set': update_data}
+                    )
+            
+            return True
+            
         except Exception as e:
             self.logger.error(f"Failed to update verification: {str(e)}")
-            raise
+            return False
 # endregion
 
 # region Roblox API Client
@@ -152,13 +185,13 @@ class OAuth2App:
     def _validate_auth_request(self, code: str, discord_id: str) -> Optional[Tuple[str, int]]:
         """Validate authentication request parameters"""
         if not all([code, discord_id]):
-            return None, 400
+            return None
         
         try:
             discord_id_int = int(discord_id)
             return code, discord_id_int
         except ValueError:
-            return None, 400
+            return None
 
     def _handle_auth(self):
         """Handle OAuth2 authorization callback"""
@@ -186,11 +219,10 @@ class OAuth2App:
 
         roblox_id, username = user_info
         
-        try:
-            self.db.update_verification(discord_id, roblox_id)
-            self.logger.info(f'[VERIFICATION] {discord_id} verified as {username}')
-        except Exception:
+        if not self.db.update_verification(discord_id, roblox_id):
             return self.error_response('Failed to update verification status', 500)
+
+        self.logger.info(f'[VERIFICATION] {discord_id} verified as {username}')
 
         return redirect(
             url_for('finished', username=username)
