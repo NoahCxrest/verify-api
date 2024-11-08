@@ -1,39 +1,6 @@
-# Web Framework
-Flask==3.0.2
-Werkzeug==3.0.1
-
-# HTTP Client
-requests==2.31.0
-urllib3==2.2.0
-certifi==2024.2.2
-
-# MongoDB
-pymongo==4.6.1
-dnspython==2.6.1  # Required for MongoDB SRV connections
-
-# Configuration
+Flask==3.0.3
+pymongo==4.10.1
 python-decouple==3.8
-
-# Logging and Monitoring
-structlog==24.1.0
-python-json-logger==2.0.7
-
-# Type Checking
-mypy==1.8.0
-types-requests==2.31.0.20240218
-types-pymongo==4.6.1.20240218
-
-# Security
-cryptography==42.0.2
-pyjwt==2.8.0
-
-# Development and Testing
-pytest==8.0.0
-pytest-cov==4.1.0
-black==24.1.1
-flake8==7.0.0
-isort==5.13.2
-
-# Production
-gunicorn==21.2.0
-python-dotenv==1.0.1
+requests==2.32.3
+structlog==24.4.0
+urllib3==2.2.3
